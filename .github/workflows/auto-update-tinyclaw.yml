@@ -1,0 +1,131 @@
+name: Auto-update tinyclaw formula
+
+on:
+  repository_dispatch:
+    types: [formula-update]
+  workflow_dispatch:
+    inputs:
+      formula:
+        description: "Formula name (e.g., tinyclaw)"
+        required: true
+        type: string
+        default: tinyclaw
+      repo:
+        description: "Upstream repo (e.g., TinyAGI/tinyclaw)"
+        required: true
+        type: string
+        default: TinyAGI/tinyclaw
+  schedule:
+    # Check daily at 06:00 UTC for new upstream releases
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Add entries here for each formula to track.
+          # repository_dispatch and workflow_dispatch override this list.
+          - formula: tinyclaw
+            repo: TinyAGI/tinyclaw
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve formula and repo
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_FORMULA: ${{ github.event.client_payload.formula }}
+          DISPATCH_REPO: ${{ github.event.client_payload.repo }}
+          INPUT_FORMULA: ${{ inputs.formula }}
+          INPUT_REPO: ${{ inputs.repo }}
+          MATRIX_FORMULA: ${{ matrix.formula }}
+          MATRIX_REPO: ${{ matrix.repo }}
+        run: |
+          if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
+            echo "formula=$DISPATCH_FORMULA" >> "$GITHUB_OUTPUT"
+            echo "repo=$DISPATCH_REPO" >> "$GITHUB_OUTPUT"
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "formula=$INPUT_FORMULA" >> "$GITHUB_OUTPUT"
+            echo "repo=$INPUT_REPO" >> "$GITHUB_OUTPUT"
+          else
+            echo "formula=$MATRIX_FORMULA" >> "$GITHUB_OUTPUT"
+            echo "repo=$MATRIX_REPO" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get latest upstream tag
+        id: upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM_REPO: ${{ steps.resolve.outputs.repo }}
+        run: |
+          # Try GitHub release first, fall back to git tags
+          TAG=$(gh release view --repo "$UPSTREAM_REPO" --json tagName -q .tagName 2>/dev/null \
+            || git ls-remote --tags --sort=-v:refname "https://github.com/${UPSTREAM_REPO}.git" \
+               | head -1 | sed 's|.*refs/tags/||')
+          if [[ -z "$TAG" ]]; then
+            echo "No tags found for $UPSTREAM_REPO — skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          VERSION="${TAG#v}"
+          URL="https://github.com/${UPSTREAM_REPO}/archive/refs/tags/${TAG}.tar.gz"
+          SHA256=$(curl -sL "$URL" | shasum -a 256 | awk '{print $1}')
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Check current formula version
+        if: steps.upstream.outputs.skip != 'true'
+        id: current
+        env:
+          FORMULA_NAME: ${{ steps.resolve.outputs.formula }}
+        run: |
+          FORMULA="Formula/${FORMULA_NAME}.rb"
+          if [[ ! -f "$FORMULA" ]]; then
+            echo "Formula $FORMULA not found — skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CURRENT=$(grep '^\s*version ' "$FORMULA" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Update formula if newer
+        if: >-
+          steps.upstream.outputs.skip != 'true' &&
+          steps.current.outputs.skip != 'true' &&
+          steps.current.outputs.version != steps.upstream.outputs.version
+        env:
+          FORMULA_NAME: ${{ steps.resolve.outputs.formula }}
+          NEW_URL: ${{ steps.upstream.outputs.url }}
+          NEW_SHA: ${{ steps.upstream.outputs.sha256 }}
+          NEW_VER: ${{ steps.upstream.outputs.version }}
+          OLD_VER: ${{ steps.current.outputs.version }}
+        run: |
+          FORMULA="Formula/${FORMULA_NAME}.rb"
+          echo "Updating $FORMULA: $OLD_VER → $NEW_VER"
+          sed -i "s|url \".*\"|url \"$NEW_URL\"|" "$FORMULA"
+          sed -i "s|sha256 \".*\"|sha256 \"$NEW_SHA\"|" "$FORMULA"
+          sed -i "s|version \".*\"|version \"$NEW_VER\"|" "$FORMULA"
+
+      - name: Commit and push
+        if: >-
+          steps.upstream.outputs.skip != 'true' &&
+          steps.current.outputs.skip != 'true' &&
+          steps.current.outputs.version != steps.upstream.outputs.version
+        env:
+          FORMULA_NAME: ${{ steps.resolve.outputs.formula }}
+          NEW_VER: ${{ steps.upstream.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "Formula/${FORMULA_NAME}.rb"
+          git commit -m "chore(${FORMULA_NAME}): auto-update to v${NEW_VER}"
+          git push

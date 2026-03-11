@@ -1,0 +1,5 @@
+[2026-03-08 00:04:31] [POST-TASK] Not a dispatch task, skipping notification
+[2026-03-08 17:50:07] [PRE-TASK] Task starting: subagent=Explore, description=Explore tinyclaw codebase
+[2026-03-08 17:50:07] [PRE-TASK] Not a dispatch task, skipping notification
+[2026-03-08 17:50:45] [POST-TASK] Task completed: subagent=Explore, description=Explore tinyclaw codebase, background=false
+[2026-03-08 17:50:45] [POST-TASK] Not a dispatch task, skipping notification

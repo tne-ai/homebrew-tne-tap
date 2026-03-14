@@ -1,9 +1,9 @@
 class Tinyclaw < Formula
   desc "Messaging bridge connecting WhatsApp/Telegram/Discord to Claude Code CLI"
   homepage "https://github.com/TinyAGI/tinyclaw"
-  url "https://github.com/TinyAGI/tinyclaw/archive/refs/tags/v0.0.12.tar.gz"
-  sha256 "0b183c7b33815ea754b7572636da7e4328a4fac82585b5eb7a4fc9552cc3293f"
-  version "0.0.12"
+  url "https://github.com/TinyAGI/tinyclaw/archive/refs/tags/v0.0.13.tar.gz"
+  sha256 "1b4b0112bfe9c2aa49c5cc8342f59271a012ab8d9588c9b5e6508dc0cfaa1611"
+  version "0.0.13"
   license "MIT"
 
   depends_on "node"

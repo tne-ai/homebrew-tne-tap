@@ -22,7 +22,9 @@ class TneEngineWorker < Formula
         exit 1
       fi
       export TNE_ENGINE_ALLOWED=1
-      exec uv run --project "$ENGINE_DIR" python "$ENGINE_DIR/temporal_worker.py" "$@"
+      # Run from engine parent dir so relative imports in engine package resolve.
+      cd "$(dirname "$ENGINE_DIR")" || exit 1
+      exec uv run --project engine python -m engine.temporal_worker "$@"
     EOS
     chmod 0755, bin/"tne-engine-worker"
   end

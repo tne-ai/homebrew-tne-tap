@@ -1,0 +1,43 @@
+---
+# Auto-bumps tne-engine-worker version timestamp when tne-plugins engine code changes.
+# HEAD-only formula (private repo) — no sha256 to update, just version for audit trail.
+# Template: lib/workflow.base/homebrew-formula-bump.workflow.yaml
+name: Bump tne-engine-worker Formula
+
+# yamllint disable-line rule:truthy
+on:
+  repository_dispatch:
+    types: [bump-formula]
+  workflow_dispatch:
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tap repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump version timestamp
+        id: ver
+        run: |
+          DATE=$(date +%Y%m%d)
+          echo "version=0.1.${DATE}" >> "$GITHUB_OUTPUT"
+
+      - name: Update formula version
+        env:
+          NEW_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          sed -i "s/version \".*\"/version \"${NEW_VERSION}\"/" Formula/tne-engine-worker.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet && echo "No changes" && exit 0
+          git add Formula/tne-engine-worker.rb
+          git commit -m "chore(formula): bump tne-engine-worker to ${{ steps.ver.outputs.version }} [skip ci]"
+          git push

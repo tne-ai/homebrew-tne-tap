@@ -1,24 +1,27 @@
 class TneEngineWorker < Formula
   desc "TNE Temporal workflow worker — executes tne-engine skill activities"
   homepage "https://github.com/tne-ai/tne-plugins"
-  # No versioned archive — worker ships as part of the tne-plugins marketplace cache.
-  # Formula manages the service lifecycle only; the engine code lives at:
-  #   ~/.claude/plugins/marketplaces/tne-plugins/plugins/tne/engine/
-  version "0.1.0"
+  # Private repo — HEAD-only formula. Install with:
+  #   brew install --HEAD tne-ai/tne-tap/tne-engine-worker
+  # The install block writes a wrapper script inline; no archive content is used.
+  # version/url are bumped by .github/workflows/bump-formula.yml for audit trail.
+  head do
+    url "https://github.com/tne-ai/tne-plugins.git", branch: "main"
+  end
+  version "0.1.20260601"
   license "MIT"
 
   depends_on "uv"
 
-  # No install step — engine code is managed by the plugin marketplace, not Homebrew.
-  # This formula exists solely to register the service with brew services.
+  # Engine code is managed by the plugin marketplace, not Homebrew.
+  # This formula installs a wrapper script and registers the brew service.
   def install
-    engine_dir = File.expand_path("~/.claude/plugins/marketplaces/tne-plugins/plugins/tne/engine")
     (bin/"tne-engine-worker").write <<~EOS
       #!/bin/bash
-      ENGINE_DIR="${TNE_ENGINE_DIR:-#{engine_dir}}"
+      ENGINE_DIR="${TNE_ENGINE_DIR:-$HOME/.claude/plugins/marketplaces/tne-plugins/plugins/tne/engine}"
       if [[ ! -f "$ENGINE_DIR/pyproject.toml" ]]; then
         echo "tne-engine not found at $ENGINE_DIR" >&2
-        echo "Run: /marketplace → tne-plugins → Install" >&2
+        echo "Run: /marketplace -> tne-plugins -> Install" >&2
         exit 1
       fi
       export TNE_ENGINE_ALLOWED=1
@@ -34,7 +37,8 @@ class TneEngineWorker < Formula
     keep_alive true
     log_path var/"log/tne-engine-worker.log"
     error_log_path var/"log/tne-engine-worker.log"
-    environment_variables TNE_ENGINE_ALLOWED: "1"
+    environment_variables TNE_ENGINE_ALLOWED: "1",
+                          PATH: "#{HOMEBREW_PREFIX}/bin:#{HOMEBREW_PREFIX}/sbin:/usr/local/bin:/usr/bin:/bin"
     working_dir Dir.home
   end
 

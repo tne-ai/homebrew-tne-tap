@@ -6,7 +6,7 @@ class TneEngineWorker < Formula
   # The install block writes a wrapper script inline; no archive content is used.
   # version/url are bumped by .github/workflows/bump-formula.yml for audit trail.
   head do
-    url "git@github.com:tne-ai/tne-plugins.git", branch: "main"
+    url "https://github.com/tne-ai/tne-plugins.git", branch: "main"
   end
   version "0.1.20260601"
   license "MIT"

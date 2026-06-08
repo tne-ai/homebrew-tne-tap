@@ -25,11 +25,28 @@ class TneEngineWorker < Formula
         exit 1
       fi
       export TNE_ENGINE_ALLOWED=1
-      # Run from engine parent dir so relative imports in engine package resolve.
+      # cd to engine parent so 'engine' package resolves as a top-level import.
       cd "$(dirname "$ENGINE_DIR")" || exit 1
       exec uv run --project engine python -m engine.temporal_worker "$@"
     EOS
     chmod 0755, bin/"tne-engine-worker"
+
+    # tne-engine: CLI client — submits workflows / runs skills from the command line.
+    # Same ENGINE_DIR resolution as the worker; runs python -m engine (not the worker).
+    (bin/"tne-engine").write <<~EOS
+      #!/bin/bash
+      ENGINE_DIR="${TNE_ENGINE_DIR:-$HOME/.claude/plugins/marketplaces/tne-plugins/plugins/tne/engine}"
+      if [[ ! -f "$ENGINE_DIR/pyproject.toml" ]]; then
+        echo "tne-engine not found at $ENGINE_DIR" >&2
+        echo "Run: /marketplace -> tne-plugins -> Install" >&2
+        exit 1
+      fi
+      export TNE_ENGINE_ALLOWED=1
+      # cd to engine parent so 'engine' package resolves as a top-level import.
+      cd "$(dirname "$ENGINE_DIR")" || exit 1
+      exec uv run --project engine python -m engine "$@"
+    EOS
+    chmod 0755, bin/"tne-engine"
   end
 
   service do
@@ -44,5 +61,6 @@ class TneEngineWorker < Formula
 
   test do
     assert_predicate bin/"tne-engine-worker", :executable?
+    assert_predicate bin/"tne-engine", :executable?
   end
 end

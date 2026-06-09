@@ -58,6 +58,7 @@ class TneEngineWorker < Formula
     log_path var/"log/tne-engine-worker.log"
     error_log_path var/"log/tne-engine-worker.log"
     environment_variables TNE_ENGINE_ALLOWED: "1",
+                          UV_KEYRING_PROVIDER: "disabled",
                           PATH: "#{HOMEBREW_PREFIX}/bin:#{HOMEBREW_PREFIX}/sbin:/usr/local/bin:/usr/bin:/bin"
     working_dir Dir.home
   end

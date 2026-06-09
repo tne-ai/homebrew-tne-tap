@@ -3,8 +3,8 @@ class TneEngineWorker < Formula
   homepage "https://github.com/tne-ai/tne-plugins"
   # Private repo — HEAD-only formula. Install with:
   #   brew install --HEAD tne-ai/tne-tap/tne-engine-worker
-  # The install block writes a wrapper script inline; no archive content is used.
-  # version/url are bumped by .github/workflows/bump-formula.yml for audit trail.
+  # Engine code is installed from the cloned repo into libexec so the worker
+  # is fully self-contained and does NOT depend on the Claude plugin marketplace.
   head do
     url "https://github.com/tne-ai/tne-plugins.git", branch: "main"
   end
@@ -13,36 +13,39 @@ class TneEngineWorker < Formula
 
   depends_on "uv"
 
-  # Engine code is managed by the plugin marketplace, not Homebrew.
-  # This formula installs a wrapper script and registers the brew service.
   def install
+    # Install engine package from the cloned source into libexec.
+    # This makes the worker self-contained — no dependency on the plugin marketplace.
+    (libexec/"engine").mkpath
+    (libexec/"engine").install Dir["plugins/tne/engine/*"]
+
+    # Pre-build the venv in libexec so workers start instantly without re-syncing.
+    system "uv", "sync", "--project", libexec/"engine"
+
+    # ENGINE_DIR resolution order:
+    #   1. TNE_ENGINE_DIR env var (explicit override — for dev/testing against a local checkout)
+    #   2. libexec/engine (default — the self-contained cellar copy installed above)
     (bin/"tne-engine-worker").write <<~EOS
       #!/bin/bash
-      ENGINE_DIR="${TNE_ENGINE_DIR:-$HOME/.claude/plugins/marketplaces/tne-plugins/plugins/tne/engine}"
+      ENGINE_DIR="${TNE_ENGINE_DIR:-#{libexec}/engine}"
       if [[ ! -f "$ENGINE_DIR/pyproject.toml" ]]; then
         echo "tne-engine not found at $ENGINE_DIR" >&2
-        echo "Run: /marketplace -> tne-plugins -> Install" >&2
         exit 1
       fi
       export TNE_ENGINE_ALLOWED=1
-      # cd to engine parent so 'engine' package resolves as a top-level import.
       cd "$(dirname "$ENGINE_DIR")" || exit 1
       exec uv run --project engine python -m engine.temporal_worker "$@"
     EOS
     chmod 0755, bin/"tne-engine-worker"
 
-    # tne-engine: CLI client — submits workflows / runs skills from the command line.
-    # Same ENGINE_DIR resolution as the worker; runs python -m engine (not the worker).
     (bin/"tne-engine").write <<~EOS
       #!/bin/bash
-      ENGINE_DIR="${TNE_ENGINE_DIR:-$HOME/.claude/plugins/marketplaces/tne-plugins/plugins/tne/engine}"
+      ENGINE_DIR="${TNE_ENGINE_DIR:-#{libexec}/engine}"
       if [[ ! -f "$ENGINE_DIR/pyproject.toml" ]]; then
         echo "tne-engine not found at $ENGINE_DIR" >&2
-        echo "Run: /marketplace -> tne-plugins -> Install" >&2
         exit 1
       fi
       export TNE_ENGINE_ALLOWED=1
-      # cd to engine parent so 'engine' package resolves as a top-level import.
       cd "$(dirname "$ENGINE_DIR")" || exit 1
       exec uv run --project engine python -m engine "$@"
     EOS
@@ -62,5 +65,7 @@ class TneEngineWorker < Formula
   test do
     assert_predicate bin/"tne-engine-worker", :executable?
     assert_predicate bin/"tne-engine", :executable?
+    # Verify the engine package is installed in libexec, not a marketplace path
+    assert_predicate libexec/"engine/pyproject.toml", :exist?
   end
 end

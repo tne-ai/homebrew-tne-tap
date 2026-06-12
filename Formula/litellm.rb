@@ -17,7 +17,7 @@ class Litellm < Formula
     # Install into an isolated venv in libexec so it doesn't pollute the system Python.
     venv = libexec/"venv"
     system "uv", "venv", venv, "--python", "python3.12"
-    system venv/"bin/pip", "install", "litellm[proxy]==#{version}"
+    system "uv", "pip", "install", "--python", venv/"bin/python", "litellm[proxy]==#{version}"
 
     (bin/"litellm").write <<~SH
       #!/bin/bash

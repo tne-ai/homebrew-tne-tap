@@ -27,6 +27,19 @@ class Mlflow < Formula
     end
   end
 
+
+  service do
+    # mlflow-serve.sh runs mlflow in the foreground so launchd manages the lifecycle.
+    # No secrets needed — MLflow uses only local paths (SQLite + filesystem).
+    run ["#{Dir.home}/ws/git/src/bin/mlflow-serve.sh"]
+    keep_alive true
+    log_path "#{Dir.home}/ws/logs/mlflow.log"
+    error_log_path "#{Dir.home}/ws/logs/mlflow.log"
+    environment_variables PATH: "#{HOMEBREW_PREFIX}/bin:#{Dir.home}/.local/bin:/usr/local/bin:/usr/bin:/bin",
+                          HOME: Dir.home,
+                          MLFLOW_PORT: "5001"
+    working_dir Dir.home
+  end
   def caveats
     <<~EOS
       mlflow is installed but not started.

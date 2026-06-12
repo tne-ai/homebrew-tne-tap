@@ -25,6 +25,18 @@ class Litellm < Formula
     SH
   end
 
+
+  service do
+    # litellm-start.sh injects 1Password secrets at runtime (r-coo92).
+    # DATABASE_URL, MLFLOW_TRACKING_URI, and provider API keys are set there.
+    run ["#{Dir.home}/ws/git/src/bin/litellm-start.sh"]
+    keep_alive true
+    log_path "#{Dir.home}/ws/logs/litellm.log"
+    error_log_path "#{Dir.home}/ws/logs/litellm.log"
+    environment_variables PATH: "#{HOMEBREW_PREFIX}/bin:#{Dir.home}/.local/bin:/usr/local/bin:/usr/bin:/bin",
+                          HOME: Dir.home
+    working_dir Dir.home
+  end
   def caveats
     <<~EOS
       litellm is installed but not configured.

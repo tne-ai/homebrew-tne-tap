@@ -19,6 +19,17 @@ class Litellm < Formula
     system "uv", "venv", venv, "--python", "python3.12"
     system "uv", "pip", "install", "--python", venv/"bin/python", "litellm[proxy]==#{version}"
 
+    # litellm[proxy] requires Prisma Python client but omits it from its own deps.
+    # Pin <7 because Prisma 7 dropped schema.prisma url= syntax that litellm 1.x uses.
+    # Run prisma generate so the client binaries are present at startup.
+    # See: https://github.com/BerriAI/litellm/issues/XXXXX (Prisma not bundled)
+    system venv/"bin/python3", "-m", "ensurepip"
+    system venv/"bin/python3", "-m", "pip", "install", "prisma>=0.11.0,<7"
+    schema = venv/"lib/python3.12/site-packages/litellm/proxy/schema.prisma"
+    with_env(PATH: "#{venv}/bin:#{ENV["PATH"]}") do
+      system venv/"bin/prisma", "generate", "--schema=#{schema}"
+    end
+
     (bin/"litellm").write <<~SH
       #!/bin/bash
       exec "#{venv}/bin/litellm" "$@"

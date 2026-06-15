@@ -37,28 +37,26 @@ class Litellm < Formula
   end
 
 
-  service do
-    # litellm-start.sh injects 1Password secrets at runtime (r-coo92).
-    # DATABASE_URL, MLFLOW_TRACKING_URI, and provider API keys are set there.
-    run ["#{Dir.home}/ws/git/src/bin/litellm-start.sh"]
-    keep_alive true
-    log_path "#{Dir.home}/ws/logs/litellm.log"
-    error_log_path "#{Dir.home}/ws/logs/litellm.log"
-    environment_variables PATH: "#{HOMEBREW_PREFIX}/bin:#{Dir.home}/.local/bin:/usr/local/bin:/usr/bin:/bin",
-                          HOME: Dir.home
-    working_dir Dir.home
-  end
   def caveats
     <<~EOS
-      litellm is installed but not configured.
+      litellm is installed. It is NOT configured as a brew service by design.
 
-      Seed your config and start the proxy:
-        install-litellm.sh       # from tne-ai/bin — generates config + LaunchAgent
-        make litellm             # or: bash start-ai.sh
+      LiteLLM requires API-key secrets (LITELLM_MASTER_KEY, provider keys).
+      Pattern C (r-cto-ops92): the daemon runs foreground from a shell that
+      already has secrets resolved by .envrc — never via a launchd plist that
+      would store plaintext on disk.
 
-      Config lives at: ~/.config/litellm/config.yaml
-      Secrets injected at runtime via: litellm-start.sh (op inject)
-      Logs at: $TNE_LOG_DIR/litellm.log  (default: ~/ws/logs/litellm.log)
+      To start the proxy (TNE workflow):
+        install-litellm.sh       # from tne-ai/bin — generates ~/.config/litellm/config.yaml
+        make ai                  # or: bash start-ai.sh — sources .envrc, execs litellm-start.sh
+
+      Config:  ~/.config/litellm/config.yaml
+      Logs:    $TNE_LOG_DIR/litellm.log  (default: ~/ws/logs/litellm.log)
+
+      External users who don't share TNE's no-plaintext-on-disk policy can
+      author their own ~/Library/LaunchAgents/*.plist with literal
+      EnvironmentVariables and `launchctl bootstrap` it directly. The formula
+      intentionally does not ship that plist.
     EOS
   end
 

@@ -34,7 +34,7 @@ class Temporal < Formula
     run [opt_bin/"temporal", "server", "start-dev",
          "--db-filename", var/"temporal/temporal.db",
          "--ui-port", "8233"]
-    keep_alive true
+    keep_alive crash: true
     error_log_path var/"log/temporal.log"
     log_path var/"log/temporal.log"
     working_dir var/"temporal"

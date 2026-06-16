@@ -19,12 +19,11 @@ class Litellm < Formula
     system "uv", "venv", venv, "--python", "python3.12"
     system "uv", "pip", "install", "--python", venv/"bin/python", "litellm[proxy]==#{version}"
 
-    # litellm[proxy] requires Prisma Python client but omits it from its own deps.
-    # Pin <7 because Prisma 7 dropped schema.prisma url= syntax that litellm 1.x uses.
-    # Run prisma generate so the client binaries are present at startup.
-    # See: https://github.com/BerriAI/litellm/issues/XXXXX (Prisma not bundled)
+    # litellm[proxy] omits several runtime deps from its own requirements.
+    # - prisma<7: Prisma 7 dropped schema.prisma url= syntax that litellm 1.x uses.
+    # - mlflow: success_callback integration needs mlflow in the same venv.
     system venv/"bin/python3", "-m", "ensurepip"
-    system venv/"bin/python3", "-m", "pip", "install", "prisma>=0.11.0,<7"
+    system venv/"bin/python3", "-m", "pip", "install", "prisma>=0.11.0,<7", "mlflow>=2.0,<4"
     schema = venv/"lib/python3.12/site-packages/litellm/proxy/schema.prisma"
     with_env(PATH: "#{venv}/bin:#{ENV["PATH"]}") do
       system venv/"bin/prisma", "generate", "--schema=#{schema}"

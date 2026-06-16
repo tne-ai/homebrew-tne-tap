@@ -36,6 +36,16 @@ class Litellm < Formula
   end
 
 
+  def post_install
+    venv = libexec/"venv"
+    schema = venv/"lib/python3.12/site-packages/litellm/proxy/schema.prisma"
+    return unless schema.exist?
+
+    with_env(PATH: "#{venv}/bin:#{ENV["PATH"]}") do
+      system venv/"bin/prisma", "generate", "--schema=#{schema}"
+    end
+  end
+
   def caveats
     <<~EOS
       litellm is installed. It is NOT configured as a brew service by design.

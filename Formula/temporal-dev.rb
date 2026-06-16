@@ -17,8 +17,9 @@ class TemporalDev < Formula
   def install
     v = build.head? ? "0.0.0-HEAD+#{Utils.git_short_head}" : version.to_s
     ldflags = "-s -w -X github.com/temporalio/cli/internal/temporalcli.Version=#{v}"
-    system "go", "build", *std_go_args(ldflags:), "./cmd/temporal"
+    system "go", "build", *std_go_args(ldflags:, output: bin/"temporal"), "./cmd/temporal"
 
+    (var/"temporal").mkpath
     generate_completions_from_executable(bin/"temporal", shell_parameter_format: :cobra)
   end
 

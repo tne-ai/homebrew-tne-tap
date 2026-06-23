@@ -1,0 +1,42 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "labels": ["dependencies"],
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 5,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track PyPI packages in Homebrew formula files",
+      "fileMatch": ["^Formula/.*\\.rb$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[a-zA-Z0-9._-]+)\\n\\s+url \"https://files\\.pythonhosted\\.org/packages/[^/]+/[^/]+/[^/]+/(?<depName2>[a-zA-Z0-9._-]+)-(?<currentValue>[0-9][^.][^\"]+)\\.tar\\.gz\""
+      ],
+      "datasourceTemplate": "{{datasource}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Track PyPI packages pinned inside pip install lines",
+      "fileMatch": ["^Formula/.*\\.rb$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[a-zA-Z0-9._-]+)\\n\\s+# renovate: datasource=[a-z-]+ depName=(?<depName2>[a-zA-Z0-9._-]+)\\n",
+        "\"(?<depName>[a-zA-Z0-9._-]+)>=(?<currentValue>[0-9][0-9.]+)\""
+      ],
+      "datasourceTemplate": "pypi"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchPackageNames": ["litellm"],
+      "matchDatasources": ["pypi"],
+      "automerge": false,
+      "schedule": ["every weekend"]
+    },
+    {
+      "matchPackageNames": ["mlflow", "prisma"],
+      "matchDatasources": ["pypi"],
+      "automerge": false,
+      "schedule": ["every weekend"]
+    }
+  ]
+}

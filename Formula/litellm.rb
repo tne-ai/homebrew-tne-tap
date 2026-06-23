@@ -2,9 +2,9 @@ class Litellm < Formula
   desc "LiteLLM proxy — unified OpenAI-compatible API gateway for 100+ LLM providers"
   homepage "https://github.com/BerriAI/litellm"
   # renovate: datasource=pypi depName=litellm
-  url "https://files.pythonhosted.org/packages/56/f1/f7cfead063f2ab1877c8fb465d0d7fe300b75f081bcb73525f6d550aeb1c/litellm-1.89.3.tar.gz"
-  sha256 "8fcdb2b7a0ef3381d41adf164443842e31ef9f0cd5bcda6fc3c0bd8bc2959510"
-  version "1.89.3"
+  url "https://files.pythonhosted.org/packages/e8/1b/de398e6cef46d4cbc4395c895330f30eab05439bf6d0c5c53b0203661eeb/litellm-1.89.1.tar.gz"
+  sha256 "eb9292f90afe46dcce4bfef6bbeaa54494945813763e1c0917f4e9a1c584c1a4"
+  version "1.89.1"
   license "MIT"
 
   depends_on "uv"

@@ -14,6 +14,34 @@ class Litellm < Formula
   # Runtime config belongs in ~/.config/litellm/ (XDG).
   # install-litellm.sh seeds ~/.config/litellm/config.yaml on first run.
 
+  # Pattern B (r-cto-ops92): op-launcher resolves 1Password secrets at launchd boot.
+  # All scripts are bin.install'd — no paths outside the brew prefix (r-cto-ops92 IX).
+  # Break-glass: populate ~/.config/litellm/secrets.env (gitignored) if 1Password unavailable.
+  service do
+    run [opt_bin/"op-launcher",
+         "--env-file", "#{Dir.home}/.config/litellm/secrets.env.tpl",
+         "--", opt_bin/"litellm-start"]
+    keep_alive({ successful_exit: false })
+    environment_variables(
+      PATH:                  "#{HOMEBREW_PREFIX}/bin:#{Dir.home}/.local/bin:/usr/local/bin:/usr/bin:/bin",
+      HOME:                  Dir.home,
+      ANTHROPIC_API_KEY:     "op://DevOps/Anthropic API Key Dev/api key",
+      MINIMAX_API_KEY:       "op://DevOps/MiniMax API Key Dev/api key",
+      MINIMAX_PLAN_KEY:      "op://DevOps/MiniMax API Key Dev/coding plan key",
+      Z_AI_PLAN_KEY:         "op://DevOps/Z.ai Plan Key Dev/api key",
+      MOONSHOT_API_KEY:      "op://DevOps/fs4np24dsdyz5smfrxxwxrodri/api key",
+      DEEPSEEK_API_KEY:      "op://DevOps/deepseek API Key Dev/api key",
+      OPENROUTER_API_KEY:    "op://DevOps/OpenRouter API Key Dev/key",
+      LITELLM_MASTER_KEY:    "op://DevOps/LiteLLM Auth Token Dev/auth token",
+      SAMBANOVA_API_KEY:     "op://DevOps/Sambanova API Token Dev/api token",
+      LM_STUDIO_API_TOKEN:   "op://Private/LM Studio API Token Dev/api token",
+      CLIPROXYAPI_KEY:       "op://DevOps/CLIProxyAPI Key Dev/api key",
+      OP_LAUNCH_FALLBACK_ENV:"#{Dir.home}/.config/litellm/secrets.env",
+    )
+    log_path       "#{Dir.home}/ws/logs/litellm.log"
+    error_log_path "#{Dir.home}/ws/logs/litellm.log"
+  end
+
   def install
     # Install into an isolated venv in libexec so it doesn't pollute the system Python.
     venv = libexec/"venv"
@@ -38,6 +66,10 @@ class Litellm < Formula
       #!/bin/bash
       exec "#{venv}/bin/litellm" "$@"
     SH
+
+    # Install service scripts so service do references only the brew prefix (r-cto-ops92 IX)
+    bin.install buildpath/"op-launcher.sh" => "op-launcher"
+    bin.install buildpath/"litellm-start.sh" => "litellm-start"
   end
 
 

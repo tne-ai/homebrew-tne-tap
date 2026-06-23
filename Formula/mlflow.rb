@@ -25,14 +25,16 @@ class Mlflow < Formula
         exec "#{venv}/bin/#{cmd}" "$@"
       SH
     end
+
+    # Install serve wrapper so service do references only brew-prefix paths (r-cto-ops92 Principle IX)
+    bin.install buildpath/"mlflow-serve.sh" => "mlflow-serve"
   end
 
-
+  # Pattern A (r-cto-ops92): no secrets needed — MLflow uses only local paths.
+  # mlflow-serve is bin.install'd so service do references only the brew prefix.
   service do
-    # mlflow-serve.sh runs mlflow in the foreground so launchd manages the lifecycle.
-    # No secrets needed — MLflow uses only local paths (SQLite + filesystem).
-    run ["#{Dir.home}/ws/git/src/bin/mlflow-serve.sh"]
-    keep_alive true
+    run [opt_bin/"mlflow-serve"]
+    keep_alive({ successful_exit: false })
     log_path "#{Dir.home}/ws/logs/mlflow.log"
     error_log_path "#{Dir.home}/ws/logs/mlflow.log"
     environment_variables PATH: "#{HOMEBREW_PREFIX}/bin:#{Dir.home}/.local/bin:/usr/local/bin:/usr/bin:/bin",
@@ -40,18 +42,16 @@ class Mlflow < Formula
                           MLFLOW_PORT: "5001"
     working_dir Dir.home
   end
+
   def caveats
     <<~EOS
-      mlflow is installed but not started.
-
-      Start via the AI stack:
-        bash start-ai.sh         # from tne-ai/bin — starts mlflow + full stack
-        make mlflow              # or standalone
+      Start mlflow:
+        brew services start tne-ai/tne-tap/mlflow
 
       Tracking URI:  http://localhost:5001
-      DB:            $TNE_DB_DIR/mlflow/mlflow.db  (default: ~/ws/db/mlflow/)
-      Artifacts:     $TNE_DB_DIR/mlflow/artifacts/
-      Logs:          $TNE_LOG_DIR/mlflow.log
+      DB:            ~/ws/db/mlflow/mlflow.db
+      Artifacts:     ~/ws/db/mlflow/artifacts/
+      Logs:          ~/ws/logs/mlflow.log
     EOS
   end
 

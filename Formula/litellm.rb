@@ -67,9 +67,116 @@ class Litellm < Formula
       exec "#{venv}/bin/litellm" "$@"
     SH
 
-    # Install service scripts so service do references only the brew prefix (r-cto-ops92 IX)
-    bin.install buildpath/"op-launcher.sh" => "op-launcher"
-    bin.install buildpath/"litellm-start.sh" => "litellm-start"
+    # Service scripts embedded inline — buildpath holds only the PyPI tarball,
+    # so tap files must be written here (r-cto-ops92 IX: brew-prefix paths only).
+    (bin/"op-launcher").write <<~'SH'
+      #!/usr/bin/env bash
+      # op-launcher.sh — launchd wrapper that resolves 1Password secrets via op run.
+      # Retries auth with backoff; exits 0 on give-up so launchd KeepAlive
+      # (SuccessfulExit=false) does not create an infinite restart cycle.
+      # Falls back to $OP_LAUNCH_FALLBACK_ENV if 1Password is unavailable.
+      #
+      # Installed by brew formula: bin.install "op-launcher.sh" => "op-launcher"
+      # r-cto-dev155 Principle IV + r-cto-ops92 Pattern B
+      set -euo pipefail
+
+      MAX_RETRIES="${OP_LAUNCH_MAX_RETRIES:-5}"
+      RETRY_DELAY="${OP_LAUNCH_RETRY_DELAY:-30}"
+      OP="${OP_BIN:-/opt/homebrew/bin/op}"
+      # Break-glass: plain env file, gitignored, never committed.
+      FALLBACK_ENV="${OP_LAUNCH_FALLBACK_ENV:-}"
+
+      _try_fallback() {
+      	if [[ -n "$FALLBACK_ENV" && -f "$FALLBACK_ENV" ]]; then
+      		echo "op-launcher: 1Password unavailable — sourcing break-glass fallback: $FALLBACK_ENV" >&2
+      		set -a
+      		# shellcheck disable=SC1090
+      		source "$FALLBACK_ENV"
+      		set +a
+      		exec "$@"
+      	fi
+      	echo "op-launcher: auth failed after $MAX_RETRIES attempts, no fallback — exiting cleanly" >&2
+      	exit 0  # exit 0: KeepAlive(successful_exit: false) does not restart
+      }
+
+      for i in $(seq 1 "$MAX_RETRIES"); do
+      	if "$OP" account list --format=json >/dev/null 2>&1; then
+      		exec "$OP" run "$@"
+      	fi
+      	echo "op-launcher: 1Password unavailable (attempt $i/$MAX_RETRIES) — retrying in ${RETRY_DELAY}s" >&2
+      	sleep "$RETRY_DELAY"
+      done
+
+      _try_fallback "$@"
+    SH
+    chmod 0755, bin/"op-launcher"
+    (bin/"litellm-start").write <<~'SH'
+      #!/usr/bin/env bash
+      # litellm-start.sh — start LiteLLM with secrets from environment.
+      # r-coo92 Principle VIII + r-cto-dev145: scripts NEVER resolve secrets.
+      # Secrets must be pre-resolved by .envrc (direnv) before this script runs.
+      # Re-run litellm-install.sh to regenerate if api-keys.yaml changes.
+      set -euo pipefail
+      SCRIPT_DIR=${SCRIPT_DIR:=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
+      LITELLM_PORT="${LITELLM_PORT:-4000}"
+      LITELLM_CFG="${LITELLM_CFG:-$HOME/.config/litellm/config.yaml}"
+      LITELLM_DB="${LITELLM_DB:-litellm}"
+      MLFLOW_PORT="${MLFLOW_PORT:-5001}"
+      LOG="${TNE_LOG_DIR:-$HOME/ws/logs}/litellm.log"
+      mkdir -p "$(dirname "$LOG")"
+
+      # Non-secret runtime config
+      export DATABASE_URL="postgresql://${USER}@localhost/${LITELLM_DB}"
+      export MLFLOW_TRACKING_URI="http://localhost:${MLFLOW_PORT}"
+      export MLFLOW_EXPERIMENT_NAME="ai-usage"
+
+      # Required secrets — must be pre-resolved by .envrc/launchd, never by this script.
+      # r-coo92 Principle VIII + r-cto-dev145 Law I: fail loud on missing or unresolved op:// literals.
+      _REQUIRED_SECRETS=(
+      	MINIMAX_API_KEY
+      	MINIMAX_PLAN_KEY
+      	Z_AI_PLAN_KEY
+      	MOONSHOT_API_KEY
+      	DEEPSEEK_API_KEY
+      	OPENROUTER_API_KEY
+      	LITELLM_MASTER_KEY
+      	SAMBANOVA_API_KEY
+      	CLIPROXYAPI_KEY
+      	LM_STUDIO_API_TOKEN
+      )
+      for _var in "${_REQUIRED_SECRETS[@]}"; do
+      	_val="${!_var:-}"
+      	[[ -z "$_val" ]] && {
+      		echo "ERROR: $_var is unset — source .envrc (r-coo92 Principle VIII)" >&2
+      		exit 1
+      	}
+      	[[ "$_val" == op://* ]] && {
+      		echo "ERROR: $_var unresolved op:// literal — direnv did not run (r-cto-dev145)" >&2
+      		exit 1
+      	}
+      done
+      unset _var _val _REQUIRED_SECRETS
+
+      # Prisma self-heal — regenerate if native query engine binary missing from cache.
+      # prisma --version succeeds even without the query engine; check the cache binary.
+      # prisma generate is code-gen only — no secret resolution (r-coo92 VIII)
+      _LITELLM_CELLAR="$(brew --cellar litellm 2>/dev/null)/$(brew list --versions litellm 2>/dev/null | awk '{print $2}')"
+      _VENV="$_LITELLM_CELLAR/libexec/venv"
+      _PRISMA="$_VENV/bin/prisma"
+      _SCHEMA="$_VENV/lib/python3.12/site-packages/litellm/proxy/schema.prisma"
+      if [[ -x "$_PRISMA" && -f "$_SCHEMA" ]]; then
+      	_QE=$(find "$HOME/.cache/prisma-python" -name "query-engine-darwin-arm64" 2>/dev/null | head -1)
+      	if [[ -z "$_QE" || ! -x "$_QE" ]]; then
+      		echo "prisma query engine missing — regenerating" >&2
+      		PATH="$_VENV/bin:$PATH" "$_PRISMA" generate --schema="$_SCHEMA" >/dev/null 2>&1 || true
+      	fi
+      	unset _QE
+      fi
+      unset _LITELLM_CELLAR _VENV _PRISMA _SCHEMA
+
+      exec litellm --config "$LITELLM_CFG" --port "$LITELLM_PORT" --host 127.0.0.1 >>"$LOG" 2>&1
+    SH
+    chmod 0755, bin/"litellm-start"
   end
 
 

@@ -14,33 +14,12 @@ class Litellm < Formula
   # Runtime config belongs in ~/.config/litellm/ (XDG).
   # install-litellm.sh seeds ~/.config/litellm/config.yaml on first run.
 
-  # Pattern B (r-cto-ops92): op-launcher resolves 1Password secrets at launchd boot.
-  # All scripts are bin.install'd — no paths outside the brew prefix (r-cto-ops92 IX).
-  # Break-glass: populate ~/.config/litellm/secrets.env (gitignored) if 1Password unavailable.
-  service do
-    run [opt_bin/"op-launcher",
-         "--env-file", "#{Dir.home}/.config/litellm/secrets.env.tpl",
-         "--", opt_bin/"litellm-start"]
-    keep_alive({ successful_exit: false })
-    environment_variables(
-      PATH:                  "#{HOMEBREW_PREFIX}/bin:#{Dir.home}/.local/bin:/usr/local/bin:/usr/bin:/bin",
-      HOME:                  Dir.home,
-      ANTHROPIC_API_KEY:     "op://DevOps/Anthropic API Key Dev/api key",
-      MINIMAX_API_KEY:       "op://DevOps/MiniMax API Key Dev/api key",
-      MINIMAX_PLAN_KEY:      "op://DevOps/MiniMax API Key Dev/coding plan key",
-      Z_AI_PLAN_KEY:         "op://DevOps/Z.ai Plan Key Dev/api key",
-      MOONSHOT_API_KEY:      "op://DevOps/fs4np24dsdyz5smfrxxwxrodri/api key",
-      DEEPSEEK_API_KEY:      "op://DevOps/deepseek API Key Dev/api key",
-      OPENROUTER_API_KEY:    "op://DevOps/OpenRouter API Key Dev/key",
-      LITELLM_MASTER_KEY:    "op://DevOps/LiteLLM Auth Token Dev/auth token",
-      SAMBANOVA_API_KEY:     "op://DevOps/Sambanova API Token Dev/api token",
-      LM_STUDIO_API_TOKEN:   "op://Private/LM Studio API Token Dev/api token",
-      CLIPROXYAPI_KEY:       "op://DevOps/CLIProxyAPI Key Dev/api key",
-      OP_LAUNCH_FALLBACK_ENV:"#{Dir.home}/.config/litellm/secrets.env",
-    )
-    log_path       "#{Dir.home}/ws/logs/litellm.log"
-    error_log_path "#{Dir.home}/ws/logs/litellm.log"
-  end
+  # NOT a brew service. litellm requires interactive 1Password secrets, which a
+  # launchd agent cannot resolve at login (the desktop app is not yet unlocked).
+  # This is r-cto-ops92 Pattern C: secret-requiring services run foreground from a
+  # post-login shell whose .envrc has resolved op:// via `op inject` (r-cto-dev154).
+  # Launcher: tne-ai/bin/start-ai.sh → litellm-start.sh. Only mlflow (no secrets)
+  # is a brew service (Pattern B).
 
   def install
     # Install into an isolated venv in libexec so it doesn't pollute the system Python.
@@ -66,117 +45,8 @@ class Litellm < Formula
       #!/bin/bash
       exec "#{venv}/bin/litellm" "$@"
     SH
-
-    # Service scripts embedded inline — buildpath holds only the PyPI tarball,
-    # so tap files must be written here (r-cto-ops92 IX: brew-prefix paths only).
-    (bin/"op-launcher").write <<~'SH'
-      #!/usr/bin/env bash
-      # op-launcher.sh — launchd wrapper that resolves 1Password secrets via op run.
-      # Retries auth with backoff; exits 0 on give-up so launchd KeepAlive
-      # (SuccessfulExit=false) does not create an infinite restart cycle.
-      # Falls back to $OP_LAUNCH_FALLBACK_ENV if 1Password is unavailable.
-      #
-      # Installed by brew formula: bin.install "op-launcher.sh" => "op-launcher"
-      # r-cto-dev155 Principle IV + r-cto-ops92 Pattern B
-      set -euo pipefail
-
-      MAX_RETRIES="${OP_LAUNCH_MAX_RETRIES:-5}"
-      RETRY_DELAY="${OP_LAUNCH_RETRY_DELAY:-30}"
-      OP="${OP_BIN:-/opt/homebrew/bin/op}"
-      # Break-glass: plain env file, gitignored, never committed.
-      FALLBACK_ENV="${OP_LAUNCH_FALLBACK_ENV:-}"
-
-      _try_fallback() {
-      	if [[ -n "$FALLBACK_ENV" && -f "$FALLBACK_ENV" ]]; then
-      		echo "op-launcher: 1Password unavailable — sourcing break-glass fallback: $FALLBACK_ENV" >&2
-      		set -a
-      		# shellcheck disable=SC1090
-      		source "$FALLBACK_ENV"
-      		set +a
-      		exec "$@"
-      	fi
-      	echo "op-launcher: auth failed after $MAX_RETRIES attempts, no fallback — exiting cleanly" >&2
-      	exit 0  # exit 0: KeepAlive(successful_exit: false) does not restart
-      }
-
-      for i in $(seq 1 "$MAX_RETRIES"); do
-      	if "$OP" account list --format=json >/dev/null 2>&1; then
-      		exec "$OP" run "$@"
-      	fi
-      	echo "op-launcher: 1Password unavailable (attempt $i/$MAX_RETRIES) — retrying in ${RETRY_DELAY}s" >&2
-      	sleep "$RETRY_DELAY"
-      done
-
-      _try_fallback "$@"
-    SH
-    chmod 0755, bin/"op-launcher"
-    (bin/"litellm-start").write <<~'SH'
-      #!/usr/bin/env bash
-      # litellm-start.sh — start LiteLLM with secrets from environment.
-      # r-coo92 Principle VIII + r-cto-dev145: scripts NEVER resolve secrets.
-      # Secrets must be pre-resolved by .envrc (direnv) before this script runs.
-      # Re-run litellm-install.sh to regenerate if api-keys.yaml changes.
-      set -euo pipefail
-      SCRIPT_DIR=${SCRIPT_DIR:=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
-      LITELLM_PORT="${LITELLM_PORT:-4000}"
-      LITELLM_CFG="${LITELLM_CFG:-$HOME/.config/litellm/config.yaml}"
-      LITELLM_DB="${LITELLM_DB:-litellm}"
-      MLFLOW_PORT="${MLFLOW_PORT:-5001}"
-      LOG="${TNE_LOG_DIR:-$HOME/ws/logs}/litellm.log"
-      mkdir -p "$(dirname "$LOG")"
-
-      # Non-secret runtime config
-      export DATABASE_URL="postgresql://${USER}@localhost/${LITELLM_DB}"
-      export MLFLOW_TRACKING_URI="http://localhost:${MLFLOW_PORT}"
-      export MLFLOW_EXPERIMENT_NAME="ai-usage"
-
-      # Required secrets — must be pre-resolved by .envrc/launchd, never by this script.
-      # r-coo92 Principle VIII + r-cto-dev145 Law I: fail loud on missing or unresolved op:// literals.
-      _REQUIRED_SECRETS=(
-      	MINIMAX_API_KEY
-      	MINIMAX_PLAN_KEY
-      	Z_AI_PLAN_KEY
-      	MOONSHOT_API_KEY
-      	DEEPSEEK_API_KEY
-      	OPENROUTER_API_KEY
-      	LITELLM_MASTER_KEY
-      	SAMBANOVA_API_KEY
-      	CLIPROXYAPI_KEY
-      	LM_STUDIO_API_TOKEN
-      )
-      for _var in "${_REQUIRED_SECRETS[@]}"; do
-      	_val="${!_var:-}"
-      	[[ -z "$_val" ]] && {
-      		echo "ERROR: $_var is unset — source .envrc (r-coo92 Principle VIII)" >&2
-      		exit 1
-      	}
-      	[[ "$_val" == op://* ]] && {
-      		echo "ERROR: $_var unresolved op:// literal — direnv did not run (r-cto-dev145)" >&2
-      		exit 1
-      	}
-      done
-      unset _var _val _REQUIRED_SECRETS
-
-      # Prisma self-heal — regenerate if native query engine binary missing from cache.
-      # prisma --version succeeds even without the query engine; check the cache binary.
-      # prisma generate is code-gen only — no secret resolution (r-coo92 VIII)
-      _LITELLM_CELLAR="$(brew --cellar litellm 2>/dev/null)/$(brew list --versions litellm 2>/dev/null | awk '{print $2}')"
-      _VENV="$_LITELLM_CELLAR/libexec/venv"
-      _PRISMA="$_VENV/bin/prisma"
-      _SCHEMA="$_VENV/lib/python3.12/site-packages/litellm/proxy/schema.prisma"
-      if [[ -x "$_PRISMA" && -f "$_SCHEMA" ]]; then
-      	_QE=$(find "$HOME/.cache/prisma-python" -name "query-engine-darwin-arm64" 2>/dev/null | head -1)
-      	if [[ -z "$_QE" || ! -x "$_QE" ]]; then
-      		echo "prisma query engine missing — regenerating" >&2
-      		PATH="$_VENV/bin:$PATH" "$_PRISMA" generate --schema="$_SCHEMA" >/dev/null 2>&1 || true
-      	fi
-      	unset _QE
-      fi
-      unset _LITELLM_CELLAR _VENV _PRISMA _SCHEMA
-
-      exec litellm --config "$LITELLM_CFG" --port "$LITELLM_PORT" --host 127.0.0.1 >>"$LOG" 2>&1
-    SH
-    chmod 0755, bin/"litellm-start"
+    # No service scripts installed — litellm is launched foreground by
+    # tne-ai/bin/start-ai.sh → litellm-start.sh (Pattern C), not by launchd.
   end
 
 
@@ -192,15 +62,14 @@ class Litellm < Formula
 
   def caveats
     <<~EOS
-      litellm is installed. Start it as a managed service:
+      litellm is installed. It is NOT a brew service by design — it needs
+      interactive 1Password secrets that a launchd agent cannot resolve at
+      login (r-cto-ops92 Pattern C).
 
-        brew services start tne-ai/tne-tap/litellm
+      Start it from a shell where direnv has resolved secrets via op inject:
 
-      Requires the 1Password desktop app running — secrets are injected via
-      op run at launchd boot (r-cto-ops92 Pattern B, r-cto-dev155).
-
-      Break-glass (no 1Password): populate ~/.config/litellm/secrets.env
-      with plain KEY=value pairs (gitignored, never committed).
+        install-litellm.sh          # seed ~/.config/litellm/config.yaml (first run)
+        bash start-ai.sh            # tne-ai/bin — sources .envrc, execs litellm-start.sh
 
       Config:  ~/.config/litellm/config.yaml
       Logs:    ~/ws/logs/litellm.log

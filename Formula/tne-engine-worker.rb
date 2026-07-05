@@ -3,8 +3,10 @@ class TneEngineWorker < Formula
   homepage "https://github.com/tne-ai/tne-plugins"
   # Private repo — HEAD-only formula. Install with:
   #   brew install --HEAD tne-ai/tne-tap/tne-engine-worker
-  # Engine code is installed from the cloned repo into libexec so the worker
-  # is fully self-contained and does NOT depend on the Claude plugin marketplace.
+  # To upgrade to latest engine code:
+  #   brew upgrade --fetch-HEAD tne-engine-worker && brew services restart tne-engine-worker
+  # To point the worker at a live checkout instead of libexec (e.g. via install-ai.sh):
+  #   set TNE_ENGINE_DIR in the launchd override plist — see install-ai.sh
   head do
     url "https://github.com/tne-ai/tne-plugins.git", branch: "main"
   end
@@ -61,6 +63,12 @@ class TneEngineWorker < Formula
                           UV_KEYRING_PROVIDER: "disabled",
                           PATH: "#{HOMEBREW_PREFIX}/bin:#{HOMEBREW_PREFIX}/sbin:/usr/local/bin:/usr/bin:/bin"
     working_dir Dir.home
+  end
+
+  # ThrottleInterval=10: minimum seconds between restarts — prevents tight crash loops.
+  # brew's service do DSL has no direct key for this so we patch the generated plist.
+  def plist
+    super.merge("ThrottleInterval" => 10)
   end
 
   test do

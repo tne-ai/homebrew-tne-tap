@@ -61,7 +61,8 @@ class Mlflow < Formula
     error_log_path "#{Dir.home}/ws/logs/mlflow.log"
     environment_variables PATH: "#{HOMEBREW_PREFIX}/bin:#{Dir.home}/.local/bin:/usr/local/bin:/usr/bin:/bin",
                           HOME: Dir.home,
-                          MLFLOW_PORT: "5001"
+                          MLFLOW_PORT: "5001",
+                          MLFLOW_DIR: "#{Dir.home}/ws/db/mlflow"
     working_dir Dir.home
   end
 
@@ -70,10 +71,14 @@ class Mlflow < Formula
       Start mlflow:
         brew services start tne-ai/tne-tap/mlflow
 
-      Tracking URI:  http://localhost:5001
-      DB:            ~/ws/db/mlflow/mlflow.db
-      Artifacts:     ~/ws/db/mlflow/artifacts/
+      Tracking URI:  http://localhost:${MLFLOW_PORT:-5001}
+      DB:            ${MLFLOW_DIR:-~/ws/db/mlflow}/mlflow.db
+      Artifacts:     ${MLFLOW_DIR:-~/ws/db/mlflow}/artifacts/
       Logs:          ~/ws/logs/mlflow.log
+
+      Override defaults (restart required):
+        MLFLOW_PORT — tracking server port (default: 5001)
+        MLFLOW_DIR  — DB + artifact root (default: ~/ws/db/mlflow)
     EOS
   end
 

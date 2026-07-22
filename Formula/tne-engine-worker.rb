@@ -10,7 +10,7 @@ class TneEngineWorker < Formula
   head do
     url "https://github.com/tne-ai/tne-plugins.git", branch: "main"
   end
-  version "0.1.20260721"
+  version "0.1.20260722"
   license "MIT"
 
   depends_on "uv"

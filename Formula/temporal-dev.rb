@@ -23,14 +23,23 @@ class TemporalDev < Formula
     generate_completions_from_executable(bin/"temporal", shell_parameter_format: :cobra)
   end
 
+  # r-cai-arch-plugin-standalone-storage: this formula exists specifically for
+  # tne-engine's use, so its data path must match the plugin-namespaced default
+  # every other tne-plugins start path resolves to (cai-plugin-state-dir.sh:
+  # ${TNE_PLUGIN_STATE_DIR:-$HOME/.tne-plugins}) — never Homebrew's own `var`
+  # prefix, which is a second, disconnected location for the same database.
+  def plugin_state_dir
+    ENV["TNE_PLUGIN_STATE_DIR"] || "#{Dir.home}/.tne-plugins"
+  end
+
   service do
     run [opt_bin/"temporal", "server", "start-dev",
-         "--db-filename", var/"temporal/temporal.db",
+         "--db-filename", "#{plugin_state_dir}/temporal/temporal.db",
          "--ui-port", "8233"]
     keep_alive :crashed
-    error_log_path var/"log/temporal.log"
-    log_path var/"log/temporal.log"
-    working_dir var/"temporal"
+    error_log_path "#{plugin_state_dir}/temporal/temporal.log"
+    log_path "#{plugin_state_dir}/temporal/temporal.log"
+    working_dir plugin_state_dir + "/temporal"
   end
 
   test do
